@@ -1,0 +1,28 @@
+{
+  "profile": {
+    "name": "Cici Stream",
+    "headline": "Deep water performance archive",
+    "summary": "Pool sessions, normalized and published as a living swim archive.",
+    "location": "Shanghai, China"
+  },
+  "display": {
+    "showPreciseTime": false,
+    "showExactLocation": false,
+    "showNotes": false,
+    "showRawPayload": false
+  },
+  "provider": {
+    "selected": "sample_json",
+    "capabilityMatrix": {
+      "sample_json": {
+        "label": "Sample JSON",
+        "supportsAuth": false,
+        "supportsListActivities": true,
+        "supportsActivityDetail": true,
+        "supportsAutomaticSync": true,
+        "qualityScore": 5
+      }
+    }
+  }
+}
+
