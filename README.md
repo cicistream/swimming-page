@@ -8,6 +8,8 @@ raw swim sessions -> canonical private data -> public generated data -> homepage
 
 The goal is to make a swimmer's training archive feel deliberate and publishable, instead of looking like a generic fitness export or admin dashboard.
 
+![Deep Water Swimming Page preview](./docs/preview.png)
+
 ## What Ships Today
 
 - Vite + React + TypeScript front end
