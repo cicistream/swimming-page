@@ -78,7 +78,7 @@ DESIGN.md             visual system source of truth
 
 `scripts/build-data.mjs` currently reads:
 
-- `sample-data/swims.json`
+- provider input selected in `swim.config.json`
 - `swim.config.json`
 
 It then generates:
@@ -114,7 +114,7 @@ Notable display behavior:
 
 ## Sample Data Contract
 
-Each input swim record is expected to include:
+Each canonical swim record is expected to include:
 
 - `id`
 - `source`
@@ -124,8 +124,8 @@ Each input swim record is expected to include:
 - `distanceMeters`
 - `durationSeconds`
 - `pacePer100mSeconds`
-- `poolLengthMeters`
-- `laps`
+- `poolLengthMeters` when the provider exposes pool detail
+- `laps` when the provider exposes pool detail
 
 Optional fields currently supported:
 
@@ -135,7 +135,7 @@ Optional fields currently supported:
 - `notes`
 - `location`
 
-Missing optional fields are preserved as partial-data markers so the UI can expose completeness honestly.
+Some providers may not expose every swim-specific field. Missing optional fields, and provider-specific gaps such as pool metadata, are preserved as partial-data markers so the UI can expose completeness honestly.
 
 ## Design Direction
 
@@ -153,6 +153,7 @@ See [DESIGN.md](./DESIGN.md) for the current source of truth.
 Implemented now:
 
 - sample JSON import path
+- provider adapter scaffold for Huawei Health
 - canonical/private to public/publish split
 - partial-data labeling
 - sync provenance scaffolding
@@ -160,11 +161,98 @@ Implemented now:
 
 Planned next:
 
-- real provider ingestion
+- real Huawei Health auth + sync implementation
 - provider selection rubric
 - manual override and conflict resolution flow
 - stronger onboarding and diagnostics
 - richer publish controls
+
+## Provider Scaffold
+
+The build pipeline now loads sessions through provider adapters in `scripts/providers/`.
+
+Available providers:
+
+- `sample_json`: reads the file configured at `provider.sampleJson.path`
+- `huawei_health`: reads a raw JSON export configured at `provider.huaweiHealth.rawDataPath` and maps it into the canonical swim contract
+- `keep_swim_probe`: reads a canonical draft generated from Keep probe responses and is displayed as `Keep` in the site UI
+
+Huawei Health scaffold notes:
+
+- current mode is a file-based scaffold, not a completed live API sync
+- local import helper lives at `npm run sync:huawei`
+- import source path can be passed with `--from` or stored in `provider.huaweiHealth.importPath`
+- expected raw file path defaults to `data/sources/huawei-health/export.json`
+- example import payload lives at `sample-data/huawei-health-export.sample.json`
+- env var names for a future auth flow live under `provider.huaweiHealth.credentialsEnv`
+
+Suggested Huawei Health bootstrap:
+
+1. Copy `sample-data/huawei-health-export.sample.json` to `data/sources/huawei-health/export.json`.
+2. Set `provider.selected` to `huawei_health` in `swim.config.json`.
+3. Replace the sample payload with your real exported or synced Huawei Health JSON.
+4. Run `npm run build:data`.
+
+Automated local import flow:
+
+1. Export your Huawei Health JSON somewhere on your computer.
+2. Run `npm run sync:huawei -- --from /absolute/path/to/export.json`.
+3. The script validates the JSON, copies it into `data/sources/huawei-health/export.json`, stores import metadata next to it, and runs `build:data`.
+4. If `provider.selected` is still `sample_json`, switch it to `huawei_health` before the next build.
+
+## Keep Probe
+
+There is also a narrow validation script for checking whether Keep's private API exposes swimming records for your account.
+
+Run it with:
+
+```bash
+npm run probe:keep:swimming -- --phone 13800000000 --password 'your-password'
+```
+
+Or probe a batch of likely swimming type names:
+
+```bash
+npm run probe:keep:swimming -- --phone 13800000000 --password 'your-password' --default-types
+```
+
+To also brute-force several likely detail endpoints derived from the returned `traininglogs` schema:
+
+```bash
+npm run probe:keep:swimming -- --phone 13800000000 --password 'your-password' --default-types --detail-candidates
+```
+
+What it does:
+
+- logs into Keep using your provided credentials
+- requests one or more candidate activity types such as `swimming`, `swim`, `poolSwimming`, and `indoorSwimming`
+- saves the raw list response under `data/sources/keep-probe/`
+- if a first record exists, requests its detail payload and saves that too
+- saves an aggregate summary file so we can compare candidate types in one place
+
+This is only for feasibility checking. It does not change your website data or import anything into the swim provider pipeline.
+
+If the probe confirms that Keep exposes swim list data, you can draft canonical sessions from the saved probe files:
+
+```bash
+npm run map:keep:swim-probe
+```
+
+That script reads the latest probe summary, picks the best matching swim sport type, and writes a canonical draft JSON to `data/sources/keep-probe/canonical-swims.draft.json`.
+
+To run the site directly from that draft, set `provider.selected` to `keep_swim_probe`. The checked-in default config still points at `sample_json` so a fresh clone can build without private probe artifacts.
+
+To refresh the Keep-based swim data in one command:
+
+```bash
+KEEP_PHONE=13800000000 KEEP_PASSWORD='your-password' npm run sync:keep
+```
+
+That runs the full local chain:
+
+- probe Keep swim list data
+- map probe output into canonical draft swims
+- rebuild `public/generated/*`
 
 ## Contributing
 

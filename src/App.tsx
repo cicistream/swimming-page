@@ -22,6 +22,9 @@ type VolumePoint = {
   distanceKm: number;
   highlight: boolean;
 };
+type ArchiveFilter = "all" | string;
+
+const ARCHIVE_PAGE_SIZE = 8;
 
 async function loadJson<T>(file: string): Promise<T> {
   const response = await fetch(file);
@@ -329,6 +332,7 @@ function formatArchiveDate(date: string) {
 
 function formatArchiveSource(source: string) {
   if (source === "sample_json") return "Sample JSON";
+  if (source === "keep_swim_probe") return "Keep";
   return source
     .split(/[_-]/)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
@@ -342,6 +346,8 @@ function App() {
   const [tooltip, setTooltip] = useState<HeatmapTooltip | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [volumeWindow, setVolumeWindow] = useState<VolumeWindow>("7d");
+  const [archivePage, setArchivePage] = useState(1);
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
 
   useEffect(() => {
     Promise.all([
@@ -392,6 +398,29 @@ function App() {
 
   const isEmpty = data.activities.length === 0;
   const isStale = data.syncReport.staleButValid || data.config.providerStatus.freshness === "stale-but-valid";
+  const archiveFilterOptions = [
+    { value: "all", label: "All" },
+    ...Array.from(new Set(data.activities.map((activity) => activity.source)))
+      .sort((left, right) => formatArchiveSource(left).localeCompare(formatArchiveSource(right)))
+      .map((source) => ({ value: source, label: formatArchiveSource(source) })),
+  ];
+  const filteredActivities =
+    archiveFilter === "all"
+      ? data.activities
+      : data.activities.filter((activity) => activity.source === archiveFilter);
+  const archivePageCount = Math.max(1, Math.ceil(filteredActivities.length / ARCHIVE_PAGE_SIZE));
+  const safeArchivePage = Math.min(archivePage, archivePageCount);
+  const archiveStartIndex = (safeArchivePage - 1) * ARCHIVE_PAGE_SIZE;
+  const paginatedActivities = filteredActivities.slice(archiveStartIndex, archiveStartIndex + ARCHIVE_PAGE_SIZE);
+
+  function handleArchivePageChange(nextPage: number) {
+    setArchivePage(Math.min(Math.max(nextPage, 1), archivePageCount));
+  }
+
+  function handleArchiveFilterChange(nextFilter: ArchiveFilter) {
+    setArchiveFilter(nextFilter);
+    setArchivePage(1);
+  }
   const heatmapYear = selectedYear ?? new Date().getUTCFullYear();
   const yearActivities = data.activities.filter((activity) => Number(activity.startedAt.slice(0, 4)) === heatmapYear);
   const heatmap = buildHeatmapCalendar(data.heatmap.filter((entry) => Number(entry.date.slice(0, 4)) === heatmapYear), heatmapYear);
@@ -670,18 +699,27 @@ function App() {
       <section className="tonal-section">
         <div className="archive-toolbar">
           <div className="archive-toolbar__controls">
-            <button type="button" className="archive-control archive-control--select" aria-label="Archive filter">
-              <span>All</span>
-              <span aria-hidden="true">⌄</span>
-            </button>
-            <button type="button" className="archive-control archive-control--primary">
-              同步数据
-            </button>
-            <button type="button" className="archive-control archive-control--ghost">
-              导入数据
-            </button>
+            <label className="archive-filter" aria-label="Archive filter">
+              <span className="archive-filter__label">Source</span>
+              <select
+                className="archive-control archive-control--select"
+                value={archiveFilter}
+                onChange={(event) => handleArchiveFilterChange(event.target.value)}
+              >
+                {archiveFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div className="archive-total">Total sessions: {data.activities.length}</div>
+          <div className="archive-toolbar__meta">
+            <div className="archive-total">Total sessions: {filteredActivities.length}</div>
+            <div className="archive-page-status">
+              Page {safeArchivePage} / {archivePageCount}
+            </div>
+          </div>
         </div>
         <div className="activity-log">
           <div className="activity-log__head" aria-hidden="true">
@@ -694,7 +732,7 @@ function App() {
             <span>Source</span>
           </div>
           <div className="activity-list">
-          {data.activities.map((activity) => (
+          {paginatedActivities.map((activity) => (
             <article key={activity.id} className="activity-item">
               <div className="activity-item__date">
                 <span>{activity.startedAt ? formatArchiveDate(activity.startedAt) : "-"}</span>
@@ -711,6 +749,41 @@ function App() {
             </article>
           ))}
           </div>
+        </div>
+        <div className="archive-pagination" aria-label="Archive pagination">
+          <button
+            type="button"
+            className="archive-page-button"
+            onClick={() => handleArchivePageChange(safeArchivePage - 1)}
+            disabled={safeArchivePage === 1}
+          >
+            Previous
+          </button>
+          <div className="archive-page-numbers" role="list" aria-label="Archive pages">
+            {Array.from({ length: archivePageCount }, (_, index) => {
+              const page = index + 1;
+              return (
+                <button
+                  key={page}
+                  type="button"
+                  role="listitem"
+                  className={`archive-page-number${page === safeArchivePage ? " archive-page-number--active" : ""}`}
+                  onClick={() => handleArchivePageChange(page)}
+                  aria-current={page === safeArchivePage ? "page" : undefined}
+                >
+                  {page}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="archive-page-button"
+            onClick={() => handleArchivePageChange(safeArchivePage + 1)}
+            disabled={safeArchivePage === archivePageCount}
+          >
+            Next
+          </button>
         </div>
       </section>
 

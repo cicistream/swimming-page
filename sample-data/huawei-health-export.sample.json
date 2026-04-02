@@ -1,0 +1,18 @@
+{
+  "activities": [
+    {
+      "activityId": "hw-swim-2026-03-29-01",
+      "startTime": "2026-03-29T06:45:00+08:00",
+      "timezone": "Asia/Shanghai",
+      "sportName": "Pool Swim",
+      "distanceMeters": 2200,
+      "durationSeconds": 3300,
+      "poolLengthMeters": 25,
+      "lapCount": 88,
+      "stroke": "Freestyle",
+      "swolf": 39,
+      "totalCalories": 510,
+      "poolName": "Indoor 25m pool"
+    }
+  ]
+}

@@ -60,12 +60,14 @@ export type HeatmapEntry = {
 };
 
 export type SyncReport = {
-  status: "partial_success" | "failed";
+  status: "success" | "partial_success" | "failed";
   provider: string;
   acceptedCount: number;
   rejectedCount: number;
   partialCount: number;
   staleButValid: boolean;
+  warnings?: string[];
+  inputPath?: string;
   rejections: Array<{
     reason: string;
     id: string;

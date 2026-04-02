@@ -482,6 +482,25 @@ body {
   flex-wrap: wrap;
 }
 
+.archive-toolbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.archive-filter {
+  display: grid;
+  gap: 6px;
+}
+
+.archive-filter__label {
+  color: rgba(167, 184, 200, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .archive-control {
   border: 0;
   border-radius: 8px;
@@ -494,11 +513,9 @@ body {
 }
 
 .archive-control--select {
-  display: inline-flex;
-  align-items: center;
-  gap: 18px;
-  min-width: 92px;
+  min-width: 132px;
   padding: 12px 14px;
+  appearance: none;
 }
 
 .archive-control--ghost {
@@ -517,6 +534,13 @@ body {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.archive-page-status {
+  color: rgba(167, 184, 200, 0.72);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .heatmap-panel--yearly {
@@ -850,6 +874,60 @@ body {
   font-weight: 600;
 }
 
+.archive-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.archive-page-button,
+.archive-page-number {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(29, 43, 55, 0.52);
+  color: rgba(230, 243, 255, 0.84);
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, opacity 180ms ease;
+}
+
+.archive-page-button {
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.archive-page-number {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.archive-page-button:hover:not(:disabled),
+.archive-page-number:hover {
+  background: rgba(57, 188, 255, 0.18);
+  color: var(--text);
+}
+
+.archive-page-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.archive-page-number--active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  color: var(--on-primary-fixed);
+}
+
+.archive-page-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
 .provenance-close__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -958,6 +1036,29 @@ body {
   .archive-toolbar {
     align-items: start;
     flex-direction: column;
+  }
+
+  .archive-toolbar__meta {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .archive-filter {
+    width: 100%;
+  }
+
+  .archive-control--select {
+    width: 100%;
+  }
+
+  .archive-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .archive-page-button {
+    width: 100%;
   }
 
   .heatmap-months {

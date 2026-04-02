@@ -1,13 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { loadProviderPayload } from "./providers/index.mjs";
 
 const rootDir = process.cwd();
 const configPath = path.join(rootDir, "swim.config.json");
-const sourcePath = path.join(rootDir, "sample-data", "swims.json");
 const privateDir = path.join(rootDir, "data", "private");
 const publicDir = path.join(rootDir, "public", "generated");
 
-const requiredFields = [
+const baseRequiredFields = [
   "id",
   "source",
   "sourceActivityId",
@@ -16,9 +16,13 @@ const requiredFields = [
   "distanceMeters",
   "durationSeconds",
   "pacePer100mSeconds",
-  "poolLengthMeters",
-  "laps",
 ];
+
+const providerRequiredFields = {
+  default: ["poolLengthMeters", "laps"],
+  huawei_health: [],
+  keep_swim_probe: [],
+};
 
 const optionalFields = ["stroke", "swolf", "calories", "notes", "location"];
 
@@ -46,7 +50,12 @@ function formatLocalTime(input, timeZone) {
   }).format(new Date(input));
 }
 
+function getRequiredFieldsForSource(source) {
+  return [...baseRequiredFields, ...(providerRequiredFields[source] ?? providerRequiredFields.default)];
+}
+
 function normalizeSession(raw) {
+  const requiredFields = getRequiredFieldsForSource(raw.source);
   const missingRequired = requiredFields.filter((field) => raw[field] == null);
   if (missingRequired.length > 0) {
     return {
@@ -74,7 +83,7 @@ function normalizeSession(raw) {
   };
 }
 
-function buildSummary(sessions) {
+function buildSummary(sessions, providerPayload) {
   const totalDistanceMeters = sessions.reduce((sum, item) => sum + item.distanceMeters, 0);
   const totalDurationSeconds = sessions.reduce((sum, item) => sum + item.durationSeconds, 0);
   const averagePaceSeconds =
@@ -94,11 +103,7 @@ function buildSummary(sessions) {
     averagePaceSeconds,
     averagePaceLabel: `${formatDuration(averagePaceSeconds)}/100m`,
     partialCount,
-    lastSuccessfulSyncLabel: new Date().toLocaleString("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "Asia/Shanghai",
-    }),
+    lastSuccessfulSyncLabel: providerPayload.lastSuccessfulSyncLabel,
   };
 }
 
@@ -140,15 +145,23 @@ function buildPublicSession(session, config) {
   };
 }
 
-function buildSyncReport({ accepted, rejected, config }) {
-  const staleBecauseProviderFailed = false;
+function buildSyncReport({ accepted, rejected, config, providerPayload }) {
+  const status =
+    accepted.length > 0
+      ? rejected.length > 0 || providerPayload.warnings.length > 0
+        ? "partial_success"
+        : "success"
+      : "failed";
+
   return {
-    status: accepted.length > 0 ? "partial_success" : "failed",
+    status,
     provider: config.provider.selected,
     acceptedCount: accepted.length,
     rejectedCount: rejected.length,
     partialCount: accepted.filter((item) => item.isPartial).length,
-    staleButValid: staleBecauseProviderFailed,
+    staleButValid: providerPayload.staleButValid,
+    warnings: providerPayload.warnings,
+    inputPath: providerPayload.inputPath,
     rejections: rejected.map((item) => ({
       reason: item.reason,
       id: item.raw.id ?? "unknown",
@@ -158,25 +171,22 @@ function buildSyncReport({ accepted, rejected, config }) {
 }
 
 async function main() {
-  const [configRaw, sessionsRaw] = await Promise.all([
-    fs.readFile(configPath, "utf8"),
-    fs.readFile(sourcePath, "utf8"),
-  ]);
+  const configRaw = await fs.readFile(configPath, "utf8");
   const config = JSON.parse(configRaw);
-  const sourceSessions = JSON.parse(sessionsRaw);
+  const providerPayload = await loadProviderPayload({ config, rootDir });
 
-  const normalized = sourceSessions.map(normalizeSession);
+  const normalized = providerPayload.sessions.map(normalizeSession);
   const accepted = normalized
     .filter((item) => item.status === "accepted")
     .map((item) => item.session)
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   const rejected = normalized.filter((item) => item.status === "rejected");
 
-  const summary = buildSummary(accepted);
+  const summary = buildSummary(accepted, providerPayload);
   const heatmap = buildHeatmap(accepted);
   const latest = accepted[0] ? buildPublicSession(accepted[0], config) : null;
   const activities = accepted.map((item) => buildPublicSession(item, config));
-  const syncReport = buildSyncReport({ accepted, rejected, config });
+  const syncReport = buildSyncReport({ accepted, rejected, config, providerPayload });
   const providerStatus = {
     selected: config.provider.selected,
     capabilities: config.provider.capabilityMatrix[config.provider.selected],
@@ -190,7 +200,17 @@ async function main() {
   await Promise.all([
     fs.writeFile(
       path.join(privateDir, "canonical-swims.json"),
-      JSON.stringify({ generatedAt: new Date().toISOString(), sessions: accepted }, null, 2),
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          provider: providerPayload.provider,
+          inputPath: providerPayload.inputPath,
+          warnings: providerPayload.warnings,
+          sessions: accepted,
+        },
+        null,
+        2,
+      ),
     ),
     fs.writeFile(path.join(publicDir, "summary.json"), JSON.stringify(summary, null, 2)),
     fs.writeFile(path.join(publicDir, "activities.json"), JSON.stringify(activities, null, 2)),

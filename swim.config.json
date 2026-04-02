@@ -21,8 +21,40 @@
         "supportsActivityDetail": true,
         "supportsAutomaticSync": true,
         "qualityScore": 5
+      },
+      "huawei_health": {
+        "label": "Huawei Health",
+        "supportsAuth": true,
+        "supportsListActivities": true,
+        "supportsActivityDetail": true,
+        "supportsAutomaticSync": false,
+        "qualityScore": 8
+      },
+      "keep_swim_probe": {
+        "label": "Keep",
+        "supportsAuth": true,
+        "supportsListActivities": true,
+        "supportsActivityDetail": false,
+        "supportsAutomaticSync": false,
+        "qualityScore": 7
       }
+    },
+    "sampleJson": {
+      "path": "sample-data/swims.json"
+    },
+    "huaweiHealth": {
+      "mode": "raw_json_file",
+      "importPath": "",
+      "rawDataPath": "data/sources/huawei-health/export.json",
+      "timezone": "Asia/Shanghai",
+      "credentialsEnv": {
+        "clientIdEnv": "HUAWEI_HEALTH_CLIENT_ID",
+        "clientSecretEnv": "HUAWEI_HEALTH_CLIENT_SECRET",
+        "redirectUriEnv": "HUAWEI_HEALTH_REDIRECT_URI"
+      }
+    },
+    "keepSwimProbe": {
+      "path": "data/sources/keep-probe/canonical-swims.draft.json"
     }
   }
 }
-
