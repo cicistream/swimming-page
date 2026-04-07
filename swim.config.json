@@ -12,7 +12,7 @@
     "showRawPayload": false
   },
   "provider": {
-    "selected": "sample_json",
+    "selected": "keep_swim_probe",
     "capabilityMatrix": {
       "sample_json": {
         "label": "Sample JSON",
@@ -27,7 +27,7 @@
         "supportsAuth": true,
         "supportsListActivities": true,
         "supportsActivityDetail": true,
-        "supportsAutomaticSync": false,
+        "supportsAutomaticSync": true,
         "qualityScore": 8
       },
       "keep_swim_probe": {
@@ -43,14 +43,30 @@
       "path": "sample-data/swims.json"
     },
     "huaweiHealth": {
-      "mode": "raw_json_file",
+      "mode": "health_kit_scaffold",
       "importPath": "",
       "rawDataPath": "data/sources/huawei-health/export.json",
+      "apiScaffoldPath": "data/sources/huawei-health/api-scaffold.json",
+      "syncMetaPath": "data/sources/huawei-health/sync-meta.json",
+      "tokenCachePath": "data/sources/huawei-health/token-cache.json",
       "timezone": "Asia/Shanghai",
       "credentialsEnv": {
         "clientIdEnv": "HUAWEI_HEALTH_CLIENT_ID",
         "clientSecretEnv": "HUAWEI_HEALTH_CLIENT_SECRET",
         "redirectUriEnv": "HUAWEI_HEALTH_REDIRECT_URI"
+      },
+      "oauthEndpoints": {
+        "authorizationUrl": "",
+        "tokenUrl": "https://oauth-login.cloud.huawei.com/oauth2/v3/token",
+        "scope": ""
+      },
+      "apiEndpoints": {
+        "activitiesUrl": "https://health-api.cloud.huawei.com/healthkit/v2/activityRecords",
+        "activityDetailUrl": "",
+        "swimTypeParam": "swimming.pool",
+        "detailDataType": "com.huawei.activity.feature.swimming.pool",
+        "sourceType": "",
+        "activityIdParam": "activityId"
       }
     },
     "keepSwimProbe": {

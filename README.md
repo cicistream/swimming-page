@@ -58,6 +58,7 @@ npm run build
 ## Available Scripts
 
 - `npm run build:data`: normalize sample/provider input into generated artifacts
+- `npm run probe:fit:swim-fields`: scan exported `.fit` files for swimming-related fields such as swolf, stroke, pool length, and laps
 - `npm run dev`: rebuild data first, then start the Vite dev server
 - `npm run build`: rebuild data, type-check, and create the production bundle
 - `npm run preview`: serve the production build locally
@@ -179,12 +180,16 @@ Available providers:
 
 Huawei Health scaffold notes:
 
-- current mode is a file-based scaffold, not a completed live API sync
+- current mode is a Health Kit sync scaffold with a raw JSON fallback
 - local import helper lives at `npm run sync:huawei`
+- local Health Kit scaffold helper lives at `npm run sync:huawei:health`
 - import source path can be passed with `--from` or stored in `provider.huaweiHealth.importPath`
 - expected raw file path defaults to `data/sources/huawei-health/export.json`
 - example import payload lives at `sample-data/huawei-health-export.sample.json`
 - env var names for a future auth flow live under `provider.huaweiHealth.credentialsEnv`
+- oauth endpoint placeholders live under `provider.huaweiHealth.oauthEndpoints`
+- scaffold metadata is written to `data/sources/huawei-health/api-scaffold.json` and `data/sources/huawei-health/sync-meta.json`
+- auth status is derived from env vars plus `data/sources/huawei-health/token-cache.json`
 
 Suggested Huawei Health bootstrap:
 
@@ -199,6 +204,37 @@ Automated local import flow:
 2. Run `npm run sync:huawei -- --from /absolute/path/to/export.json`.
 3. The script validates the JSON, copies it into `data/sources/huawei-health/export.json`, stores import metadata next to it, and runs `build:data`.
 4. If `provider.selected` is still `sample_json`, switch it to `huawei_health` before the next build.
+
+Health Kit local scaffold flow:
+
+1. Run `npm run sync:huawei:health` to generate the local auth/sync scaffold files.
+2. If you already have a Huawei Health raw JSON file, run `npm run sync:huawei:health -- --from /absolute/path/to/export.json`.
+3. The script writes the scaffold metadata, stages the raw JSON into `data/sources/huawei-health/export.json`, and runs `build:data`.
+4. Later, when the real Huawei Health auth flow is wired in, this command is the intended one-command sync entrypoint.
+
+Useful scaffold subcommands:
+
+- `npm run sync:huawei:health -- --print-auth-url` prints an authorization URL after you fill the oauth endpoint and required env vars
+- `npm run sync:huawei:health -- --authorization-code YOUR_CODE` stores a returned auth code in the local scaffold metadata
+- `npm run sync:huawei:health -- --set-token '{"accessToken":"...","refreshToken":"...","expiresAt":"2026-04-02T12:00:00Z"}'` stores a token cache payload for local scaffold testing
+- `npm run sync:huawei:health -- --exchange-code` exchanges the stored auth code for tokens using the configured token endpoint and env vars
+- `npm run sync:huawei:health -- --refresh-access-token` refreshes the cached access token using the cached refresh token and env vars
+- `npm run sync:huawei:health -- --fetch-activities --mock-activities-response sample-data/huawei-health-export.sample.json` runs the activity fetch path against a local mock payload and stages it into `data/sources/huawei-health/export.json`
+- `npm run sync:huawei:health -- --fetch-activities --days 30` uses the configured activities endpoint plus cached token to fetch a recent swim window once `provider.huaweiHealth.apiEndpoints.activitiesUrl` is filled in
+- `npm run sync:huawei:health -- --fetch-activity-detail ACTIVITY_ID --mock-activities-response sample-data/huawei-health-export.sample.json` runs the detail fetch path and prints the returned top-level keys for schema inspection
+
+Current scaffold behavior:
+
+- reports Huawei Health auth status such as `missing_env`, `env_ready`, `refreshable`, or `authorized`
+- keeps token cache responsibilities isolated in `scripts/providers/huawei-health-auth.mjs`
+- still builds from staged raw JSON until the live Huawei Health fetch step is implemented
+- uses `https://oauth-login.cloud.huawei.com/oauth2/v3/token` as the default token endpoint unless you override `provider.huaweiHealth.oauthEndpoints.tokenUrl`
+- keeps the live activity fetch endpoint configurable under `provider.huaweiHealth.apiEndpoints.activitiesUrl` so we can plug in the verified Huawei Health endpoint without changing the CLI shape later
+- keeps the live activity detail endpoint configurable under `provider.huaweiHealth.apiEndpoints.activityDetailUrl` for the same reason
+- the default activities endpoint is now set to `https://health-api.cloud.huawei.com/healthkit/v2/activityRecords`, based on the official Health Kit REST activity records list reference you shared
+- the default swim activity type is now set to `swimming.pool`, based on the official Huawei swimming data type guide you shared; `detailDataType` remains optional
+- the Huawei pool swimming feature fields we currently expect are `trip_times`, `pool_length`, and `swimming_stroke`, based on the official swimming guide screenshot you shared
+- the default `detailDataType` is now set to `com.huawei.activity.feature.swimming.pool` so the list request can ask for pool-swim feature stats by default
 
 ## Keep Probe
 
@@ -253,6 +289,31 @@ That runs the full local chain:
 - probe Keep swim list data
 - map probe output into canonical draft swims
 - rebuild `public/generated/*`
+
+### Keep swimming notes
+
+What is confirmed so far:
+
+- Keep swim list probing works for candidate types such as `swim`, `poolSwimming`, and `indoorSwimming`
+- the current local site integration uses that list-level data successfully
+- the saved Keep list payload includes useful summary fields such as start time, duration, calories, average/max heart rate, vendor info, and a text title that usually contains the distance
+
+Current limits:
+
+- the list payload does not currently expose `poolLengthMeters`, `laps`, `swolf`, or `stroke`
+- the guessed Keep detail endpoints we tried, including `/{sportType}log/{id}` and several `traininglogs` variants, did not return a usable swim detail payload
+- Keep's swim `distance` field can be `0`, so the current mapper falls back to parsing distance from titles like `游泳池游泳 1025 米`
+
+Network debugging notes:
+
+- Charles with plain phone proxy works, so proxying itself is not the problem
+- Charles SSL Proxying causes Keep to fail while normal browser HTTPS still works
+- in practice, that means ordinary Charles interception is not a reliable path to the Keep swim detail JSON for this app
+
+Recommendation:
+
+- use `npm run sync:keep` for the current stable, list-based swim sync
+- if you want `poolLengthMeters`, `laps`, or `swolf`, plan for a stronger reverse-engineering path such as emulator + system certs, rooted device, or Frida, instead of repeating ordinary Charles attempts
 
 ## Contributing
 

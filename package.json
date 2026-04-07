@@ -6,9 +6,11 @@
   "scripts": {
     "build:data": "node scripts/build-data.mjs",
     "map:keep:swim-probe": "node scripts/map-keep-swim-probe.mjs",
+    "probe:fit:swim-fields": "python3 scripts/probe_fit_swim_fields.py",
     "probe:keep:swimming": "node scripts/probe-keep-swimming.mjs",
     "sync:keep": "node scripts/sync-keep-swim-probe.mjs",
     "sync:huawei": "node scripts/sync-huawei-export.mjs",
+    "sync:huawei:health": "node scripts/sync-huawei-health.mjs",
     "dev": "npm run build:data && vite",
     "build": "npm run build:data && tsc -b && vite build",
     "preview": "vite preview"
