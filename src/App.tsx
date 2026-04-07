@@ -23,6 +23,12 @@ type VolumePoint = {
   highlight: boolean;
 };
 type ArchiveFilter = "all" | string;
+type StrokeBreakdownItem = {
+  label: string;
+  tone: string;
+  distanceMeters: number;
+  percentage: number;
+};
 
 const ARCHIVE_PAGE_SIZE = 8;
 
@@ -262,19 +268,22 @@ function buildStrokeBreakdown(activities: Activity[]) {
     if (stroke === "backstroke") totals.set("Backstroke", (totals.get("Backstroke") ?? 0) + activity.distanceMeters);
     if (stroke === "breaststroke") totals.set("Breaststroke", (totals.get("Breaststroke") ?? 0) + activity.distanceMeters);
     if (stroke === "butterfly") totals.set("Butterfly", (totals.get("Butterfly") ?? 0) + activity.distanceMeters);
-    if (stroke === "mixed" || stroke === "") totals.set("Mixed", (totals.get("Mixed") ?? 0) + activity.distanceMeters);
+    if (stroke === "mixed") totals.set("Mixed", (totals.get("Mixed") ?? 0) + activity.distanceMeters);
   }
 
   const totalDistance = [...totals.values()].reduce((sum, value) => sum + value, 0);
 
-  return canonical.map((item) => {
-    const distanceMeters = totals.get(item.label) ?? 0;
-    return {
-      ...item,
-      distanceMeters,
-      percentage: totalDistance > 0 ? Math.round((distanceMeters / totalDistance) * 100) : 0,
-    };
-  });
+  return {
+    hasKnownStrokeData: totalDistance > 0,
+    items: canonical.map((item): StrokeBreakdownItem => {
+      const distanceMeters = totals.get(item.label) ?? 0;
+      return {
+        ...item,
+        distanceMeters,
+        percentage: totalDistance > 0 ? Math.round((distanceMeters / totalDistance) * 100) : 0,
+      };
+    }),
+  };
 }
 
 function buildYearSummary(activities: Activity[]) {
@@ -337,6 +346,24 @@ function formatArchiveSource(source: string) {
     .split(/[_-]/)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+}
+
+function isKeepSource(source: string) {
+  return source === "keep_swim_probe";
+}
+
+function formatMissingMetric(value: string | number | null | undefined, unavailableLabel: string) {
+  const displayValue = fallbackDisplay(value);
+  return displayValue === "-" ? unavailableLabel : displayValue;
+}
+
+function formatStrokeLabel(activity: Activity) {
+  const stroke = activity.stroke?.trim();
+  if (stroke) {
+    return stroke;
+  }
+
+  return isKeepSource(activity.source) ? "Keep list data" : "Not logged";
 }
 
 function App() {
@@ -436,6 +463,7 @@ function App() {
   const yearSummary = buildYearSummary(yearActivities);
   const ownerDisplay = (import.meta.env.VITE_PAGE_OWNER ?? data.config.profile.name ?? "").trim();
   const pageOwnerLabel = ownerDisplay ? `${ownerDisplay}'s` : "-";
+  const isKeepSelected = isKeepSource(data.config.providerStatus.selected);
 
   const showHeatmapTooltip = (event: MouseEvent<HTMLDivElement>, content: string, position: "above" | "below") => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -672,25 +700,29 @@ function App() {
               </div>
             </div>
             <aside className="stroke-card stroke-card--consistency">
-              <div className="stroke-legend" aria-label="Stroke legend">
-                {strokeBreakdown.map((item) => (
-                  <div key={item.label} className="stroke-legend-item" title={`${item.label}: ${item.percentage}%`}>
-                    <i className={`stroke-dot ${item.tone}`} />
-                    <span>{item.label}</span>
+              {strokeBreakdown.hasKnownStrokeData ? (
+                <>
+                  <div className="stroke-legend" aria-label="Stroke legend">
+                    {strokeBreakdown.items.map((item) => (
+                      <div key={item.label} className="stroke-legend-item" title={`${item.label}: ${item.percentage}%`}>
+                        <i className={`stroke-dot ${item.tone}`} />
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="stroke-bar">
-                {strokeBreakdown.map((item) => (
-                  <div
-                    key={item.label}
-                    className={`stroke-segment ${item.tone}`}
-                    style={{ width: `${item.percentage}%` }}
-                    onMouseEnter={(event) => showVolumeTooltip(event, `${item.label}\n${item.percentage}%`)}
-                    onMouseLeave={() => setTooltip(null)}
-                  />
-                ))}
-              </div>
+                  <div className="stroke-bar">
+                    {strokeBreakdown.items.map((item) => (
+                      <div
+                        key={item.label}
+                        className={`stroke-segment ${item.tone}`}
+                        style={{ width: `${item.percentage}%` }}
+                        onMouseEnter={(event) => showVolumeTooltip(event, `${item.label}\n${item.percentage}%`)}
+                        onMouseLeave={() => setTooltip(null)}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </aside>
           </div>
         </div>
@@ -741,10 +773,14 @@ function App() {
               <div className="activity-item__duration">{fallbackDisplay(activity.durationLabel)}</div>
               <div className="activity-item__stats">
                 <strong>{fallbackDisplay(activity.paceLabel)}</strong>
-                <span>{fallbackDisplay(activity.stroke ?? "Mixed")}</span>
+                <span>{formatStrokeLabel(activity)}</span>
               </div>
-              <div className="activity-item__stroke-frequency">-</div>
-              <div className="activity-item__swolf">{fallbackDisplay(activity.swolf)}</div>
+              <div className={`activity-item__stroke-frequency${isKeepSource(activity.source) ? " activity-item__metric--muted" : ""}`}>
+                {formatMissingMetric(null, isKeepSource(activity.source) ? "Not exposed" : "-")}
+              </div>
+              <div className={`activity-item__swolf${isKeepSource(activity.source) && activity.swolf == null ? " activity-item__metric--muted" : ""}`}>
+                {formatMissingMetric(activity.swolf, isKeepSource(activity.source) ? "Not exposed" : "-")}
+              </div>
               <div className="activity-item__source">{activity.source ? formatArchiveSource(activity.source) : "-"}</div>
             </article>
           ))}

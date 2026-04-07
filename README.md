@@ -58,6 +58,7 @@ npm run build
 ## Available Scripts
 
 - `npm run build:data`: normalize sample/provider input into generated artifacts
+- `npm run probe:fit:swim-fields`: scan exported `.fit` files for swimming-related fields such as swolf, stroke, pool length, and laps
 - `npm run dev`: rebuild data first, then start the Vite dev server
 - `npm run build`: rebuild data, type-check, and create the production bundle
 - `npm run preview`: serve the production build locally
@@ -253,6 +254,31 @@ That runs the full local chain:
 - probe Keep swim list data
 - map probe output into canonical draft swims
 - rebuild `public/generated/*`
+
+### Keep swimming notes
+
+What is confirmed so far:
+
+- Keep swim list probing works for candidate types such as `swim`, `poolSwimming`, and `indoorSwimming`
+- the current local site integration uses that list-level data successfully
+- the saved Keep list payload includes useful summary fields such as start time, duration, calories, average/max heart rate, vendor info, and a text title that usually contains the distance
+
+Current limits:
+
+- the list payload does not currently expose `poolLengthMeters`, `laps`, `swolf`, or `stroke`
+- the guessed Keep detail endpoints we tried, including `/{sportType}log/{id}` and several `traininglogs` variants, did not return a usable swim detail payload
+- Keep's swim `distance` field can be `0`, so the current mapper falls back to parsing distance from titles like `游泳池游泳 1025 米`
+
+Network debugging notes:
+
+- Charles with plain phone proxy works, so proxying itself is not the problem
+- Charles SSL Proxying causes Keep to fail while normal browser HTTPS still works
+- in practice, that means ordinary Charles interception is not a reliable path to the Keep swim detail JSON for this app
+
+Recommendation:
+
+- use `npm run sync:keep` for the current stable, list-based swim sync
+- if you want `poolLengthMeters`, `laps`, or `swolf`, plan for a stronger reverse-engineering path such as emulator + system certs, rooted device, or Frida, instead of repeating ordinary Charles attempts
 
 ## Contributing
 
