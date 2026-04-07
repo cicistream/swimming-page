@@ -255,6 +255,25 @@ That runs the full local chain:
 - map probe output into canonical draft swims
 - rebuild `public/generated/*`
 
+Keep sync metadata is persisted under `data/sources/keep-probe/sync-meta.json`, so the site can show the real last successful sync time, the most recent failed attempt, and whether the current archive has gone stale.
+
+## GitHub Actions Automation
+
+There is a scheduled GitHub Actions workflow for Keep-based refresh and GitHub Pages deploy in `.github/workflows/keep-sync-pages.yml`.
+
+Repository secrets required:
+
+- `KEEP_PHONE`
+- `KEEP_PASSWORD`
+
+The workflow:
+
+- runs `npm run sync:keep` with `SWIM_PROVIDER_OVERRIDE=keep_swim_probe`
+- builds the site with a GitHub Pages base path
+- deploys the updated static site to GitHub Pages
+
+Before relying on it, enable GitHub Pages for the repository and allow GitHub Actions to deploy Pages artifacts.
+
 ### Keep swimming notes
 
 What is confirmed so far:

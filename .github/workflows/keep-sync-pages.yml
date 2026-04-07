@@ -1,0 +1,57 @@
+name: Keep Sync Pages
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: keep-sync-pages
+  cancel-in-progress: true
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      KEEP_PHONE: ${{ secrets.KEEP_PHONE }}
+      KEEP_PASSWORD: ${{ secrets.KEEP_PASSWORD }}
+      SWIM_PROVIDER_OVERRIDE: keep_swim_probe
+      VITE_BASE_PATH: /${{ github.event.repository.name }}/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Keep data
+        run: npm run sync:keep
+
+      - name: Build site
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

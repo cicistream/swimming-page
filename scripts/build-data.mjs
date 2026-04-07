@@ -147,7 +147,9 @@ function buildPublicSession(session, config) {
 
 function buildSyncReport({ accepted, rejected, config, providerPayload }) {
   const status =
-    accepted.length > 0
+    providerPayload.lastAttemptStatus === "failed"
+      ? "failed"
+      : accepted.length > 0
       ? rejected.length > 0 || providerPayload.warnings.length > 0
         ? "partial_success"
         : "success"
@@ -160,6 +162,12 @@ function buildSyncReport({ accepted, rejected, config, providerPayload }) {
     rejectedCount: rejected.length,
     partialCount: accepted.filter((item) => item.isPartial).length,
     staleButValid: providerPayload.staleButValid,
+    lastSuccessfulSyncAt: providerPayload.lastSuccessfulSyncAt,
+    lastSuccessfulSyncLabel: providerPayload.lastSuccessfulSyncLabel,
+    lastAttemptAt: providerPayload.lastAttemptAt,
+    lastAttemptLabel: providerPayload.lastAttemptLabel,
+    lastAttemptStatus: providerPayload.lastAttemptStatus,
+    lastAttemptError: providerPayload.lastAttemptError,
     warnings: providerPayload.warnings,
     inputPath: providerPayload.inputPath,
     rejections: rejected.map((item) => ({
@@ -174,6 +182,7 @@ async function main() {
   const configRaw = await fs.readFile(configPath, "utf8");
   const config = JSON.parse(configRaw);
   const providerPayload = await loadProviderPayload({ config, rootDir });
+  const activeProvider = providerPayload.selectedProvider ?? config.provider.selected;
 
   const normalized = providerPayload.sessions.map(normalizeSession);
   const accepted = normalized
@@ -186,10 +195,21 @@ async function main() {
   const heatmap = buildHeatmap(accepted);
   const latest = accepted[0] ? buildPublicSession(accepted[0], config) : null;
   const activities = accepted.map((item) => buildPublicSession(item, config));
-  const syncReport = buildSyncReport({ accepted, rejected, config, providerPayload });
+  const syncReport = buildSyncReport({
+    accepted,
+    rejected,
+    config: {
+      ...config,
+      provider: {
+        ...config.provider,
+        selected: activeProvider,
+      },
+    },
+    providerPayload,
+  });
   const providerStatus = {
-    selected: config.provider.selected,
-    capabilities: config.provider.capabilityMatrix[config.provider.selected],
+    selected: activeProvider,
+    capabilities: config.provider.capabilityMatrix[activeProvider],
     freshness: syncReport.staleButValid ? "stale-but-valid" : "fresh",
     completeness: accepted.some((item) => item.isPartial) ? "partial" : "complete",
   };

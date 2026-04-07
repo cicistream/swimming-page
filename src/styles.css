@@ -75,6 +75,11 @@ body {
   align-items: start;
 }
 
+.hero__sync-block {
+  display: grid;
+  gap: 14px;
+}
+
 .page-title-banner {
   margin-bottom: 36px;
 }
@@ -121,6 +126,20 @@ body {
 .state-panel p {
   color: var(--text-muted);
   line-height: 1.6;
+}
+
+.hero__sync-meta {
+  display: grid;
+  gap: 6px;
+}
+
+.hero__sync-meta p {
+  margin: 0;
+}
+
+.hero__sync-meta strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .hero__status-row {

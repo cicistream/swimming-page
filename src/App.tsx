@@ -33,7 +33,8 @@ type StrokeBreakdownItem = {
 const ARCHIVE_PAGE_SIZE = 8;
 
 async function loadJson<T>(file: string): Promise<T> {
-  const response = await fetch(file);
+  const normalizedFile = file.startsWith("/") ? file.slice(1) : file;
+  const response = await fetch(new URL(normalizedFile, window.location.origin + import.meta.env.BASE_URL).toString());
   if (!response.ok) {
     throw new Error(`Failed to load ${file}`);
   }
@@ -366,6 +367,25 @@ function formatStrokeLabel(activity: Activity) {
   return isKeepSource(activity.source) ? "Keep list data" : "Not logged";
 }
 
+function formatSyncStatus(syncReport: SyncReport) {
+  if (syncReport.lastAttemptStatus === "failed" || syncReport.status === "failed") {
+    return { tone: "neutral" as const, label: "Sync failed" };
+  }
+
+  if (syncReport.staleButValid) {
+    return { tone: "neutral" as const, label: "Stale but valid" };
+  }
+
+  if (syncReport.status === "success") {
+    return { tone: "green" as const, label: "Sync healthy" };
+  }
+
+  if (syncReport.status === "partial_success") {
+    return { tone: "aqua" as const, label: "Sync partial" };
+  }
+  return { tone: "neutral" as const, label: "Sync healthy" };
+}
+
 function App() {
   const [data, setData] = useState<DataState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -463,7 +483,13 @@ function App() {
   const yearSummary = buildYearSummary(yearActivities);
   const ownerDisplay = (import.meta.env.VITE_PAGE_OWNER ?? data.config.profile.name ?? "").trim();
   const pageOwnerLabel = ownerDisplay ? `${ownerDisplay}'s` : "-";
-  const isKeepSelected = isKeepSource(data.config.providerStatus.selected);
+  const syncStatus = formatSyncStatus(data.syncReport);
+  const syncWarnings = data.syncReport.warnings ?? [];
+  const lastFailureMessage =
+    data.syncReport.lastAttemptStatus === "failed" && data.syncReport.lastAttemptError
+      ? `Last failure: ${data.syncReport.lastAttemptError}`
+      : null;
+  const primarySyncWarning = syncWarnings.find((warning) => warning !== lastFailureMessage) ?? null;
 
   const showHeatmapTooltip = (event: MouseEvent<HTMLDivElement>, content: string, position: "above" | "below") => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -511,6 +537,29 @@ function App() {
         </h1>
       </header>
       <section className="hero hero--dashboard">
+        <div className="hero__sync-block">
+          <p className="eyebrow">Sync status</p>
+          <div className="hero__status-row">
+            <StatusPill tone={syncStatus.tone}>{syncStatus.label}</StatusPill>
+            <StatusPill tone={data.config.providerStatus.capabilities.supportsAutomaticSync ? "green" : "neutral"}>
+              {data.config.providerStatus.capabilities.supportsAutomaticSync ? "Automatic sync ready" : "Manual sync only"}
+            </StatusPill>
+            <StatusPill tone={data.summary.partialCount > 0 ? "aqua" : "green"}>
+              {data.summary.partialCount > 0 ? `${data.summary.partialCount} partial record${data.summary.partialCount === 1 ? "" : "s"}` : "Complete record set"}
+            </StatusPill>
+          </div>
+          <div className="hero__sync-meta">
+            <p>
+              Last successful sync: <strong>{fallbackDisplay(data.syncReport.lastSuccessfulSyncLabel)}</strong>
+            </p>
+            <p>
+              Last sync attempt: <strong>{fallbackDisplay(data.syncReport.lastAttemptLabel ?? data.syncReport.lastSuccessfulSyncLabel)}</strong>
+            </p>
+            {lastFailureMessage ? <p>{lastFailureMessage}</p> : null}
+            {isStale ? <p>The current Keep archive is still valid, but it has passed the freshness window.</p> : null}
+            {primarySyncWarning ? <p>{primarySyncWarning}</p> : null}
+          </div>
+        </div>
         <div className="dashboard-metrics">
           <div className="dashboard-metric">
             <span>Total distance</span>
@@ -835,7 +884,11 @@ function App() {
           </div>
           <div>
             <span>Automatic sync</span>
-            <strong>{data.config.providerStatus.capabilities.supportsAutomaticSync ? "Enabled" : "Not yet"}</strong>
+            <strong>{data.config.providerStatus.capabilities.supportsAutomaticSync ? "Ready" : "Not yet"}</strong>
+          </div>
+          <div>
+            <span>Last success</span>
+            <strong>{fallbackDisplay(data.syncReport.lastSuccessfulSyncLabel)}</strong>
           </div>
           <div>
             <span>Rejected records</span>

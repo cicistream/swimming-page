@@ -1,4 +1,11 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { spawn } from "node:child_process";
+
+const rootDir = process.cwd();
+const configPath = path.join(rootDir, "swim.config.json");
+const keepProbeDir = path.join(rootDir, "data", "sources", "keep-probe");
+const syncMetaPath = path.join(keepProbeDir, "sync-meta.json");
 
 function printUsage() {
   console.log("Usage:");
@@ -93,7 +100,60 @@ function runNodeScript(scriptPath, scriptArgs) {
   });
 }
 
+async function readJsonIfExists(filePath) {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function readConfig() {
+  const raw = await fs.readFile(configPath, "utf8");
+  return JSON.parse(raw);
+}
+
+async function readDraftMetadata(config) {
+  const configuredPath =
+    config.provider?.keepSwimProbe?.path ?? "data/sources/keep-probe/canonical-swims.draft.json";
+  const draftPath = path.join(rootDir, configuredPath);
+  const draft = await readJsonIfExists(draftPath);
+
+  return {
+    configuredPath,
+    selectedSportType: draft?.selectedSportType ?? null,
+    sessionCount: Array.isArray(draft?.sessions) ? draft.sessions.length : 0,
+  };
+}
+
+async function writeSyncMeta(update) {
+  const existing = (await readJsonIfExists(syncMetaPath)) ?? {};
+  const next = {
+    provider: "keep_swim_probe",
+    mode: "list_probe_sync",
+    updatedAt: update.updatedAt,
+    lastAttemptAt: update.lastAttemptAt,
+    lastAttemptStatus: update.lastAttemptStatus,
+    lastAttemptError: update.lastAttemptError ?? null,
+    lastSuccessfulSyncAt: update.lastSuccessfulSyncAt ?? existing.lastSuccessfulSyncAt ?? null,
+    lastSuccessfulSyncSessionCount:
+      update.lastSuccessfulSyncSessionCount ?? existing.lastSuccessfulSyncSessionCount ?? null,
+    selectedSportType: update.selectedSportType ?? existing.selectedSportType ?? null,
+    configuredDraftPath: update.configuredDraftPath ?? existing.configuredDraftPath ?? null,
+    buildTriggered: update.buildTriggered,
+  };
+
+  await fs.mkdir(keepProbeDir, { recursive: true });
+  await fs.writeFile(syncMetaPath, JSON.stringify(next, null, 2));
+}
+
 async function main() {
+  const config = await readConfig();
+  const previousSyncMeta = (await readJsonIfExists(syncMetaPath)) ?? {};
   const args = parseArgs(process.argv.slice(2));
   if (!args.phone || !args.password) {
     printUsage();
@@ -111,11 +171,41 @@ async function main() {
     probeArgs.push("--detail-candidates");
   }
 
-  await runNodeScript("scripts/probe-keep-swimming.mjs", probeArgs);
-  await runNodeScript("scripts/map-keep-swim-probe.mjs", []);
+  try {
+    await runNodeScript("scripts/probe-keep-swimming.mjs", probeArgs);
+    await runNodeScript("scripts/map-keep-swim-probe.mjs", []);
 
-  if (!args.skipBuild) {
-    await runNodeScript("scripts/build-data.mjs", []);
+    const finishedAt = new Date().toISOString();
+    const draftMetadata = await readDraftMetadata(config);
+    await writeSyncMeta({
+      updatedAt: finishedAt,
+      lastAttemptAt: finishedAt,
+      lastAttemptStatus: "success",
+      lastAttemptError: null,
+      lastSuccessfulSyncAt: finishedAt,
+      lastSuccessfulSyncSessionCount: draftMetadata.sessionCount,
+      selectedSportType: draftMetadata.selectedSportType,
+      configuredDraftPath: draftMetadata.configuredPath,
+      buildTriggered: !args.skipBuild,
+    });
+
+    if (!args.skipBuild) {
+      await runNodeScript("scripts/build-data.mjs", []);
+    }
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    await writeSyncMeta({
+      updatedAt: failedAt,
+      lastAttemptAt: failedAt,
+      lastAttemptStatus: "failed",
+      lastAttemptError: error instanceof Error ? error.message : String(error),
+      lastSuccessfulSyncAt: previousSyncMeta.lastSuccessfulSyncAt ?? null,
+      lastSuccessfulSyncSessionCount: previousSyncMeta.lastSuccessfulSyncSessionCount ?? null,
+      selectedSportType: previousSyncMeta.selectedSportType ?? null,
+      configuredDraftPath: previousSyncMeta.configuredDraftPath ?? null,
+      buildTriggered: !args.skipBuild,
+    });
+    throw error;
   }
 }
 

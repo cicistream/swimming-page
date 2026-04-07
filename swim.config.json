@@ -35,7 +35,7 @@
         "supportsAuth": true,
         "supportsListActivities": true,
         "supportsActivityDetail": false,
-        "supportsAutomaticSync": false,
+        "supportsAutomaticSync": true,
         "qualityScore": 7
       }
     },
@@ -54,7 +54,8 @@
       }
     },
     "keepSwimProbe": {
-      "path": "data/sources/keep-probe/canonical-swims.draft.json"
+      "path": "data/sources/keep-probe/canonical-swims.draft.json",
+      "staleAfterHours": 36
     }
   }
 }

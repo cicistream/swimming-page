@@ -9,12 +9,17 @@ const providerLoaders = {
 };
 
 export async function loadProviderPayload({ config, rootDir }) {
-  const selectedProvider = config.provider?.selected;
+  const selectedProvider = process.env.SWIM_PROVIDER_OVERRIDE || config.provider?.selected;
   const loader = providerLoaders[selectedProvider];
 
   if (!selectedProvider || !loader) {
     throw new Error(`Unsupported provider "${selectedProvider ?? "unknown"}" in swim.config.json`);
   }
 
-  return loader({ config, rootDir });
+  const payload = await loader({ config, rootDir });
+
+  return {
+    ...payload,
+    selectedProvider,
+  };
 }

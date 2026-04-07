@@ -66,6 +66,12 @@ export type SyncReport = {
   rejectedCount: number;
   partialCount: number;
   staleButValid: boolean;
+  lastSuccessfulSyncAt?: string | null;
+  lastSuccessfulSyncLabel?: string | null;
+  lastAttemptAt?: string | null;
+  lastAttemptLabel?: string | null;
+  lastAttemptStatus?: "success" | "failed" | null;
+  lastAttemptError?: string | null;
   warnings?: string[];
   inputPath?: string;
   rejections: Array<{
