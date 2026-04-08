@@ -11,14 +11,18 @@
     "sync:keep": "node scripts/sync-keep-swim-probe.mjs",
     "sync:huawei": "node scripts/sync-huawei-export.mjs",
     "dev": "npm run build:data && vite",
+    "dev:keep": "SWIM_PROVIDER_OVERRIDE=keep_swim_probe npm run build:data && vite",
     "build": "npm run build:data && tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "worker:dev": "npx wrangler dev",
+    "worker:deploy": "npx wrangler deploy"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@types/node": "^25.5.2",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^5.0.0",

@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import type { Activity, HeatmapEntry, PublicConfig, Summary, SyncReport } from "./types";
 
 type DataState = {
@@ -15,6 +15,11 @@ type HeatmapTooltip = {
   top: number;
   left: number;
 };
+type ToastTone = "success" | "error" | "info";
+type ToastState = {
+  tone: ToastTone;
+  message: string;
+} | null;
 
 type VolumeWindow = "7d" | "30d" | "year";
 type VolumePoint = {
@@ -32,23 +37,53 @@ type StrokeBreakdownItem = {
 
 const ARCHIVE_PAGE_SIZE = 8;
 
-async function loadJson<T>(file: string): Promise<T> {
+async function loadJson<T>(file: string, cacheBust?: number): Promise<T> {
   const normalizedFile = file.startsWith("/") ? file.slice(1) : file;
-  const response = await fetch(new URL(normalizedFile, window.location.origin + import.meta.env.BASE_URL).toString());
+  const url = new URL(normalizedFile, window.location.origin + import.meta.env.BASE_URL);
+  if (cacheBust) {
+    url.searchParams.set("t", String(cacheBust));
+  }
+  const response = await fetch(url.toString());
   if (!response.ok) {
     throw new Error(`Failed to load ${file}`);
   }
   return response.json() as Promise<T>;
 }
 
-function StatusPill({
-  tone,
-  children,
-}: {
-  tone: "neutral" | "aqua" | "green";
-  children: string;
-}) {
-  return <span className={`status-pill status-pill--${tone}`}>{children}</span>;
+function showFriendlyError(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback;
+}
+
+function inferImportProvider(raw: string) {
+  const parsed = JSON.parse(raw);
+  if (
+    Array.isArray(parsed) &&
+    parsed.every(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        "startedAt" in item &&
+        "distanceMeters" in item &&
+        "durationSeconds" in item,
+    )
+  ) {
+    return "sample_json" as const;
+  }
+
+  return "huawei_health" as const;
+}
+
+async function loadPublishedData(cacheBust = Date.now()): Promise<DataState> {
+  const [config, summary, activities, latest, heatmap, syncReport] = await Promise.all([
+    loadJson<PublicConfig>("/generated/config.json", cacheBust),
+    loadJson<Summary>("/generated/summary.json", cacheBust),
+    loadJson<Activity[]>("/generated/activities.json", cacheBust),
+    loadJson<Activity | null>("/generated/latest.json", cacheBust),
+    loadJson<HeatmapEntry[]>("/generated/heatmap.json", cacheBust),
+    loadJson<SyncReport>("/generated/sync-report.json", cacheBust),
+  ]);
+
+  return { config, summary, activities, latest, heatmap, syncReport };
 }
 
 type HeatmapDay = {
@@ -367,25 +402,6 @@ function formatStrokeLabel(activity: Activity) {
   return isKeepSource(activity.source) ? "Keep list data" : "Not logged";
 }
 
-function formatSyncStatus(syncReport: SyncReport) {
-  if (syncReport.lastAttemptStatus === "failed" || syncReport.status === "failed") {
-    return { tone: "neutral" as const, label: "Sync failed" };
-  }
-
-  if (syncReport.staleButValid) {
-    return { tone: "neutral" as const, label: "Stale but valid" };
-  }
-
-  if (syncReport.status === "success") {
-    return { tone: "green" as const, label: "Sync healthy" };
-  }
-
-  if (syncReport.status === "partial_success") {
-    return { tone: "aqua" as const, label: "Sync partial" };
-  }
-  return { tone: "neutral" as const, label: "Sync healthy" };
-}
-
 function App() {
   const [data, setData] = useState<DataState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -395,20 +411,20 @@ function App() {
   const [volumeWindow, setVolumeWindow] = useState<VolumeWindow>("7d");
   const [archivePage, setArchivePage] = useState(1);
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
-    Promise.all([
-      loadJson<PublicConfig>("/generated/config.json"),
-      loadJson<Summary>("/generated/summary.json"),
-      loadJson<Activity[]>("/generated/activities.json"),
-      loadJson<Activity | null>("/generated/latest.json"),
-      loadJson<HeatmapEntry[]>("/generated/heatmap.json"),
-      loadJson<SyncReport>("/generated/sync-report.json"),
-    ])
-      .then(([config, summary, activities, latest, heatmap, syncReport]) => {
-        setData({ config, summary, activities, latest, heatmap, syncReport });
+    loadPublishedData()
+      .then((nextData) => {
+        setData(nextData);
         const latestYear =
-          heatmap.length > 0 ? Math.max(...heatmap.map((entry) => Number(entry.date.slice(0, 4)))) : new Date().getUTCFullYear();
+          nextData.heatmap.length > 0
+            ? Math.max(...nextData.heatmap.map((entry) => Number(entry.date.slice(0, 4))))
+            : new Date().getUTCFullYear();
         setSelectedYear(latestYear);
       })
       .catch((reason: Error) => {
@@ -418,6 +434,135 @@ function App() {
         setIsLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToast(null);
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
+
+  async function refreshPublishedData() {
+    const nextData = await loadPublishedData(Date.now());
+    setData(nextData);
+    const latestYear =
+      nextData.heatmap.length > 0
+        ? Math.max(...nextData.heatmap.map((entry) => Number(entry.date.slice(0, 4))))
+        : new Date().getUTCFullYear();
+    setSelectedYear(latestYear);
+  }
+
+  async function handleSyncClick() {
+    setToast(null);
+    if (!data || data.config.providerStatus.selected !== "keep_swim_probe") {
+      setToast({
+        tone: "info",
+        message: "Sync is only available when the published archive is using the Keep provider.",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      if (import.meta.env.DEV) {
+        const response = await fetch("/api/dev/sync-keep", { method: "POST" });
+        const payload = (await response.json()) as { error?: string };
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Failed to sync Keep data.");
+        }
+
+        await refreshPublishedData();
+        setToast({ tone: "success", message: "Keep data synced and page refreshed." });
+        return;
+      }
+
+      const triggerUrl = import.meta.env.VITE_SYNC_TRIGGER_URL;
+      if (!triggerUrl) {
+        throw new Error("Online sync needs a secure trigger URL because GitHub Pages cannot safely hold GitHub credentials.");
+      }
+
+      const response = await fetch(triggerUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          source: "swimming-page",
+          action: "sync_keep",
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to trigger GitHub Actions sync.");
+      }
+
+      setToast({
+        tone: "info",
+        message: "Sync requested. GitHub Actions will rebuild and redeploy the page shortly.",
+      });
+    } catch (reason) {
+      setToast({ tone: "error", message: showFriendlyError(reason, "Sync failed.") });
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function handleImportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!importFile) {
+      setToast({ tone: "error", message: "Choose a JSON file first." });
+      return;
+    }
+
+    if (!import.meta.env.DEV) {
+      setToast({
+        tone: "error",
+        message: "Import is only available in local development because the deployed site cannot write source files.",
+      });
+      return;
+    }
+
+    setToast(null);
+    setIsImporting(true);
+
+    try {
+      const content = await importFile.text();
+      const provider = inferImportProvider(content);
+      const response = await fetch("/api/dev/import-data", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider,
+          fileName: importFile.name,
+          content,
+        }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Import failed.");
+      }
+
+      await refreshPublishedData();
+      setIsImportModalOpen(false);
+      setImportFile(null);
+      setToast({
+        tone: "success",
+        message: provider === "sample_json" ? "Sample data imported and page refreshed." : "Provider JSON imported and page refreshed.",
+      });
+    } catch (reason) {
+      setToast({ tone: "error", message: showFriendlyError(reason, "Import failed.") });
+    } finally {
+      setIsImporting(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -483,13 +628,9 @@ function App() {
   const yearSummary = buildYearSummary(yearActivities);
   const ownerDisplay = (import.meta.env.VITE_PAGE_OWNER ?? data.config.profile.name ?? "").trim();
   const pageOwnerLabel = ownerDisplay ? `${ownerDisplay}'s` : "-";
-  const syncStatus = formatSyncStatus(data.syncReport);
-  const syncWarnings = data.syncReport.warnings ?? [];
-  const lastFailureMessage =
-    data.syncReport.lastAttemptStatus === "failed" && data.syncReport.lastAttemptError
-      ? `Last failure: ${data.syncReport.lastAttemptError}`
-      : null;
-  const primarySyncWarning = syncWarnings.find((warning) => warning !== lastFailureMessage) ?? null;
+  const activeProvider = data.config.providerStatus.selected;
+  const canTriggerKeepSync = activeProvider === "keep_swim_probe";
+  const syncButtonLabel = canTriggerKeepSync ? "Sync data" : "Keep sync unavailable for this provider";
 
   const showHeatmapTooltip = (event: MouseEvent<HTMLDivElement>, content: string, position: "above" | "below") => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -530,36 +671,59 @@ function App() {
           {tooltip.content}
         </div>
       ) : null}
-      <header className="page-title-banner">
-        <p>{pageOwnerLabel}</p>
-        <h1>
-          <span>Swimming</span> Page
-        </h1>
-      </header>
-      <section className="hero hero--dashboard">
-        <div className="hero__sync-block">
-          <p className="eyebrow">Sync status</p>
-          <div className="hero__status-row">
-            <StatusPill tone={syncStatus.tone}>{syncStatus.label}</StatusPill>
-            <StatusPill tone={data.config.providerStatus.capabilities.supportsAutomaticSync ? "green" : "neutral"}>
-              {data.config.providerStatus.capabilities.supportsAutomaticSync ? "Automatic sync ready" : "Manual sync only"}
-            </StatusPill>
-            <StatusPill tone={data.summary.partialCount > 0 ? "aqua" : "green"}>
-              {data.summary.partialCount > 0 ? `${data.summary.partialCount} partial record${data.summary.partialCount === 1 ? "" : "s"}` : "Complete record set"}
-            </StatusPill>
-          </div>
-          <div className="hero__sync-meta">
-            <p>
-              Last successful sync: <strong>{fallbackDisplay(data.syncReport.lastSuccessfulSyncLabel)}</strong>
-            </p>
-            <p>
-              Last sync attempt: <strong>{fallbackDisplay(data.syncReport.lastAttemptLabel ?? data.syncReport.lastSuccessfulSyncLabel)}</strong>
-            </p>
-            {lastFailureMessage ? <p>{lastFailureMessage}</p> : null}
-            {isStale ? <p>The current Keep archive is still valid, but it has passed the freshness window.</p> : null}
-            {primarySyncWarning ? <p>{primarySyncWarning}</p> : null}
+      {toast ? (
+        <div className={`toast toast--${toast.tone}`} role="status" aria-live="polite">
+          <span>{toast.message}</span>
+          <button type="button" className="toast__close" onClick={() => setToast(null)} aria-label="Dismiss message">
+            ×
+          </button>
+        </div>
+      ) : null}
+      {isImportModalOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
+          <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+            <p className="eyebrow">Import data</p>
+            <h2>Upload a JSON file to refresh the archive locally.</h2>
+            <form className="import-form" onSubmit={handleImportSubmit}>
+              <label className={`import-dropzone${importFile ? " import-dropzone--selected" : ""}`}>
+                <input
+                  className="import-dropzone__input"
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+                />
+                <span className="import-dropzone__eyebrow">JSON file</span>
+                <strong>{importFile ? importFile.name : "Drop a file here or click to browse"}</strong>
+                <em>Canonical swim arrays import as Sample JSON. Other JSON files are treated as provider imports.</em>
+              </label>
+              <div className="import-form__note">
+                Local import rewrites the matching source file, runs `build:data`, and refreshes the page.
+              </div>
+              <div className="import-form__actions">
+                <button type="button" className="archive-control archive-control--ghost" onClick={() => setIsImportModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="archive-control archive-control--ghost" disabled={isImporting}>
+                  {isImporting ? "Importing..." : "Import"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      ) : null}
+      <header className="page-title-banner page-title-banner--with-meta">
+        <div>
+          <p>{pageOwnerLabel}</p>
+          <h1>
+            <span>Swimming</span> Page
+          </h1>
+        </div>
+        <div className="page-title-meta" aria-label="Last sync time">
+          <span>Last sync</span>
+          <strong>{fallbackDisplay(data.syncReport.lastSuccessfulSyncLabel)}</strong>
+        </div>
+      </header>
+      <section className="hero hero--dashboard">
         <div className="dashboard-metrics">
           <div className="dashboard-metric">
             <span>Total distance</span>
@@ -794,6 +958,35 @@ function App() {
                 ))}
               </select>
             </label>
+            <div className="archive-actions" aria-label="Archive actions">
+              <button
+                type="button"
+                className={`hero-action-button${isSyncing ? " is-busy" : ""}`}
+                data-tooltip={syncButtonLabel}
+                aria-label={syncButtonLabel}
+                onClick={handleSyncClick}
+                disabled={isSyncing || !canTriggerKeepSync}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 12a8 8 0 0 1-13.66 5.66" />
+                  <path d="M4 12a8 8 0 0 1 13.66-5.66" />
+                  <path d="M7 17H4v-3" />
+                  <path d="M17 7h3v3" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="hero-action-button"
+                data-tooltip="Import data"
+                aria-label="Import data"
+                onClick={() => setIsImportModalOpen(true)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
+              </button>
+            </div>
           </div>
           <div className="archive-toolbar__meta">
             <div className="archive-total">Total sessions: {filteredActivities.length}</div>

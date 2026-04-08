@@ -2,6 +2,9 @@ name: Keep Sync Pages
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types:
+      - sync_keep
   schedule:
     - cron: "17 */6 * * *"
 
@@ -21,16 +24,18 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       KEEP_PHONE: ${{ secrets.KEEP_PHONE }}
       KEEP_PASSWORD: ${{ secrets.KEEP_PASSWORD }}
       SWIM_PROVIDER_OVERRIDE: keep_swim_probe
       VITE_BASE_PATH: /${{ github.event.repository.name }}/
+      VITE_SYNC_TRIGGER_URL: https://swimming-page-sync-trigger.cicistream-c21.workers.dev
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm

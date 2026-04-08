@@ -257,6 +257,36 @@ That runs the full local chain:
 
 Keep sync metadata is persisted under `data/sources/keep-probe/sync-meta.json`, so the site can show the real last successful sync time, the most recent failed attempt, and whether the current archive has gone stale.
 
+### Online sync trigger
+
+The deployed GitHub Pages site cannot safely hold GitHub credentials, so online sync uses a small relay service.
+
+This repo includes a Cloudflare Worker template at `infra/sync-trigger-worker.js`.
+Wrangler deployment config lives in `wrangler.toml`.
+
+Worker env vars:
+
+- `ALLOWED_ORIGIN`: your deployed site origin, for example `https://cicistream.github.io`
+- `GITHUB_OWNER`: GitHub owner or org, for example `cicistream`
+- `GITHUB_REPO`: repo name, for example `swimming-page`
+- `GITHUB_TOKEN`: GitHub token with permission to dispatch repository events
+
+Front-end env var:
+
+- `VITE_SYNC_TRIGGER_URL`: the deployed Worker URL
+
+The relay validates the browser origin, then sends a `repository_dispatch` event with type `sync_keep`, which is handled by `.github/workflows/keep-sync-pages.yml`.
+
+Quick deploy:
+
+```bash
+npx wrangler login
+npx wrangler secret put GITHUB_TOKEN
+npm run worker:deploy
+```
+
+Then set `VITE_SYNC_TRIGGER_URL` to the deployed Worker URL before building and deploying the site.
+
 ## GitHub Actions Automation
 
 There is a scheduled GitHub Actions workflow for Keep-based refresh and GitHub Pages deploy in `.github/workflows/keep-sync-pages.yml`.

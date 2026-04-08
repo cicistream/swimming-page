@@ -9,3 +9,7 @@ scripts/__pycache__/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+.dev.vars
+.env
+.env.local
+.wrangler

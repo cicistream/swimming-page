@@ -1,0 +1,12 @@
+name = "swimming-page-sync-trigger"
+main = "infra/sync-trigger-worker.js"
+compatibility_date = "2026-04-08"
+workers_dev = true
+
+[observability.logs]
+enabled = true
+
+[vars]
+ALLOWED_ORIGIN = "https://cicistream.github.io"
+GITHUB_OWNER = "cicistream"
+GITHUB_REPO = "swimming-page"
