@@ -118,11 +118,39 @@ function decodeDistanceFromName(name) {
   return null;
 }
 
+function isSwimRecord(stats) {
+  const title = typeof stats?.name === "string" ? stats.name : "";
+  const subtype = typeof stats?.subtype === "string" ? stats.subtype.toLowerCase() : "";
+  const schema = typeof stats?.schema === "string" ? stats.schema.toLowerCase() : "";
+  const dataType = typeof stats?.dataType === "string" ? stats.dataType.toLowerCase() : "";
+
+  if (/游泳|swim/i.test(title)) {
+    return true;
+  }
+
+  if (subtype.includes("swim") || dataType.includes("swim")) {
+    return true;
+  }
+
+  if (schema.includes("traininglogs/") && schema.includes("swimming")) {
+    return true;
+  }
+
+  return false;
+}
+
 function buildCanonicalSession(stats) {
+  if (!isSwimRecord(stats)) {
+    return null;
+  }
+
+  const titleDistance = decodeDistanceFromName(stats.name);
+  const titleImpliesPoolSwim = typeof stats?.name === "string" && /游泳池游泳|pool/i.test(stats.name);
   const distanceMeters =
+    (titleImpliesPoolSwim && titleDistance ? titleDistance : null) ??
     (typeof stats.accurateDistance === "number" && stats.accurateDistance > 0 ? stats.accurateDistance : null) ??
     (typeof stats.distance === "number" && stats.distance > 0 ? stats.distance : null) ??
-    decodeDistanceFromName(stats.name);
+    titleDistance;
   const durationSeconds =
     (typeof stats.accurateDuration === "number" && stats.accurateDuration > 0 ? stats.accurateDuration : null) ??
     (typeof stats.duration === "number" && stats.duration > 0 ? stats.duration : null);

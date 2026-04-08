@@ -6,6 +6,8 @@ Deep Water Swimming Page is a swim-native personal performance homepage built ar
 raw swim sessions -> canonical private data -> public generated data -> homepage
 ```
 
+Live site: [cicistream.github.io/swimming-page](https://cicistream.github.io/swimming-page/)
+
 The goal is to make a swimmer's training archive feel deliberate and publishable, instead of looking like a generic fitness export or admin dashboard.
 
 ![Deep Water Swimming Page preview](./docs/preview.png)
@@ -263,6 +265,11 @@ The deployed GitHub Pages site cannot safely hold GitHub credentials, so online 
 
 This repo includes a Cloudflare Worker template at `infra/sync-trigger-worker.js`.
 Wrangler deployment config lives in `wrangler.toml`.
+
+Current deployed URLs:
+
+- site: [https://cicistream.github.io/swimming-page/](https://cicistream.github.io/swimming-page/)
+- sync trigger: [https://swimming-page-sync-trigger.cicistream-c21.workers.dev](https://swimming-page-sync-trigger.cicistream-c21.workers.dev)
 
 Worker env vars:
 
