@@ -294,6 +294,26 @@ npm run worker:deploy
 
 Then set `VITE_SYNC_TRIGGER_URL` to the deployed Worker URL before building and deploying the site.
 
+## Local import support
+
+The local import modal in development currently supports:
+
+- `.json`: imports directly into the matching JSON-backed provider and rebuilds the page
+- `.csv`: maps common swim export columns into canonical swim sessions and rebuilds the page
+- `.tcx`, `.xml`: parses swim TCX-style activity data into canonical swim sessions and rebuilds the page
+- `.gpx`: parses swim tracks into approximate canonical swim sessions and rebuilds the page
+- `.fit`: stores the file under `data/sources/fit-probe/imports/` and refreshes the FIT swim field probe report
+- `.zip`: stores the file under `data/sources/manual-imports/` for future mapping work
+
+CSV imports currently recognize common columns such as:
+
+- time: `date`, `startedAt`, `startTime`, `datetime`
+- distance: `distance`, `distanceMeters`, `distanceKm`
+- duration: `duration`, `durationSeconds`, `durationMinutes`, `time`
+- optional metadata: `poolLength`, `laps`, `stroke`, `swolf`, `calories`, `notes`, `location`
+
+There is a starter template at `sample-data/swims.import-template.csv`.
+
 ## GitHub Actions Automation
 
 There is a scheduled GitHub Actions workflow for Keep-based refresh and GitHub Pages deploy in `.github/workflows/keep-sync-pages.yml`.

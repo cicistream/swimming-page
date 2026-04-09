@@ -73,6 +73,20 @@ function inferImportProvider(raw: string) {
   return "huawei_health" as const;
 }
 
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
 async function loadPublishedData(cacheBust = Date.now()): Promise<DataState> {
   const [config, summary, activities, latest, heatmap, syncReport] = await Promise.all([
     loadJson<PublicConfig>("/generated/config.json", cacheBust),
@@ -532,31 +546,36 @@ function App() {
     setIsImporting(true);
 
     try {
-      const content = await importFile.text();
-      const provider = inferImportProvider(content);
+      const lowerName = importFile.name.toLowerCase();
+      const isJson = lowerName.endsWith(".json");
+      const content = isJson ? await importFile.text() : null;
+      const base64 = await fileToBase64(importFile);
       const response = await fetch("/api/dev/import-data", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          provider,
           fileName: importFile.name,
           content,
+          base64,
         }),
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as {
+        error?: string;
+        message?: string;
+        refreshTriggered?: boolean;
+      };
       if (!response.ok) {
         throw new Error(payload.error ?? "Import failed.");
       }
 
-      await refreshPublishedData();
+      if (payload.refreshTriggered) {
+        await refreshPublishedData();
+      }
       setIsImportModalOpen(false);
       setImportFile(null);
-      setToast({
-        tone: "success",
-        message: provider === "sample_json" ? "Sample data imported and page refreshed." : "Provider JSON imported and page refreshed.",
-      });
+      setToast({ tone: "success", message: payload.message ?? "Import completed." });
     } catch (reason) {
       setToast({ tone: "error", message: showFriendlyError(reason, "Import failed.") });
     } finally {
@@ -683,21 +702,21 @@ function App() {
         <div className="modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
           <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
             <p className="eyebrow">Import data</p>
-            <h2>Upload a JSON file to refresh the archive locally.</h2>
+            <h2>Upload a swim export file to refresh the archive locally.</h2>
             <form className="import-form" onSubmit={handleImportSubmit}>
               <label className={`import-dropzone${importFile ? " import-dropzone--selected" : ""}`}>
                 <input
                   className="import-dropzone__input"
                   type="file"
-                  accept="application/json,.json"
+                  accept=".json,.fit,.csv,.gpx,.tcx,.xml,.zip,application/json,application/xml,text/csv,application/zip"
                   onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
                 />
-                <span className="import-dropzone__eyebrow">JSON file</span>
+                <span className="import-dropzone__eyebrow">Swim export</span>
                 <strong>{importFile ? importFile.name : "Drop a file here or click to browse"}</strong>
-                <em>Canonical swim arrays import as Sample JSON. Other JSON files are treated as provider imports.</em>
+                <em>Supports JSON, FIT, CSV, GPX, TCX, XML, and ZIP uploads.</em>
               </label>
               <div className="import-form__note">
-                Local import rewrites the matching source file, runs `build:data`, and refreshes the page.
+                JSON, CSV, TCX/XML, and GPX files can rebuild the page immediately. FIT files are probed for swim fields. ZIP files are staged for later mapping.
               </div>
               <div className="import-form__actions">
                 <button type="button" className="archive-control archive-control--ghost" onClick={() => setIsImportModalOpen(false)}>

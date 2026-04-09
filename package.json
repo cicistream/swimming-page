@@ -10,6 +10,7 @@
     "probe:keep:swimming": "node scripts/probe-keep-swimming.mjs",
     "sync:keep": "node scripts/sync-keep-swim-probe.mjs",
     "sync:huawei": "node scripts/sync-huawei-export.mjs",
+    "test": "node --test",
     "dev": "npm run build:data && vite",
     "dev:keep": "SWIM_PROVIDER_OVERRIDE=keep_swim_probe npm run build:data && vite",
     "build": "npm run build:data && tsc -b && vite build",
@@ -18,6 +19,7 @@
     "worker:deploy": "npx wrangler deploy"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.5.11",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
